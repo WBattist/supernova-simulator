@@ -12,6 +12,22 @@ float phase = 0.0f;
 float eccentricity = 0.25f;
 float inclination = 0.0f;
 float longitude = 0.0f;
+// straight from web sim ...
+static Vector3 RotateOrbitPoint(Vector3 point, float inclinationDegrees, float longitudeDegrees) {
+    float incRad = inclinationDegrees * (PI / 180.0f);
+    float lonRad = longitudeDegrees * (PI / 180.0f);
+
+    float cosInc = cosf(incRad);
+    float sinInc = sinf(incRad);
+    float cosLon = cosf(lonRad);
+    float sinLon = sinf(lonRad);
+
+    return Vector3{
+        point.x * cosLon - point.z * sinLon * cosInc,
+        point.z * sinInc,
+        point.x * sinLon + point.z * cosLon * cosInc
+    };
+}
 
 Object CreateWhiteDwarf(Vector3 position, Vector3 velocity, float mass, Vector4 color, bool glow, float density) {
     return Object(position, velocity, mass, density, color, glow, OBJ_WHITE_DWARF);
@@ -39,10 +55,10 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     separation = 1.4e9f;
     phase = 0.0f;
     eccentricity = 0.0f;
-    inclination = 0.0f;    // Flat orbit in X-Z plane
+    inclination = 0.0f;
     longitude = 0.0f;
 
-    double m_WD1 = 1.20f * M_SUN;
+    double m_WD1 = 1.90f * M_SUN;
     double m_WD2 = 1.05f * M_SUN;
 
     Vector3 systemCenter = { 0.0f, 0.0f, 0.0f };
@@ -53,10 +69,10 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     float r2 = r * (m_WD1 / (m_WD1 + m_WD2));
     float orbitalOmega = sqrtf((float)(G * (m_WD1 + m_WD2) / (r * r * r)));
 
-    Vector3 pos1 = systemCenter + Vector3{ -r1, 0.0f, 0.0f };
-    Vector3 pos2 = systemCenter + Vector3{ r2, 0.0f, 0.0f };
-    Vector3 vel1 = Vector3{ 0.0f, 0.0f, -orbitalOmega * r1 };
-    Vector3 vel2 = Vector3{ 0.0f, 0.0f, orbitalOmega * r2 };
+    Vector3 pos1 = systemCenter + RotateOrbitPoint(Vector3{ -r1, 0.0f, 0.0f }, inclination, longitude);
+    Vector3 pos2 = systemCenter + RotateOrbitPoint(Vector3{ r2, 0.0f, 0.0f }, inclination, longitude);
+    Vector3 vel1 = RotateOrbitPoint(Vector3{ 0.0f, 0.0f, -orbitalOmega * r1 }, inclination, longitude);
+    Vector3 vel2 = RotateOrbitPoint(Vector3{ 0.0f, 0.0f, orbitalOmega * r2 }, inclination, longitude);
 
 // Convert custom macro color to normalized floats for shader rendering
     Vector4 normalizedColor = {

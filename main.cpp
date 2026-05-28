@@ -225,6 +225,12 @@ int main() {
                     DrawModel(sphereModel, ToRenderPosition(p.position), fmaxf(ToRenderLength(p.radius), 1.0f), babyboybuttermybunsblue);
                 }
             }
+
+            rlDisableDepthTest();
+            rlDisableDepthMask();
+            DrawOrbitalPaths(objs, eccentricity, inclination, longitude);
+            rlEnableDepthMask();
+            rlEnableDepthTest();
         EndMode3D();
 
         DrawFPS(10, 10);

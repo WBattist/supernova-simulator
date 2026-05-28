@@ -3,6 +3,10 @@
 #include "Object.h"
 
 extern float simulationSpeedFactor;
+// straight from web sim ...
+extern float eccentricity;
+extern float inclination;
+extern float longitude;
 
 Object CreateWhiteDwarf(Vector3 position, Vector3 velocity, float mass, Vector4 color, bool glow = false, float density = WHITE_DWARF_DENSITY);
 
