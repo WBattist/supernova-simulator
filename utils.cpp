@@ -5,6 +5,7 @@
 
 
 using namespace std;
+
 struct StarLayer {
     double radius;
     double density;
