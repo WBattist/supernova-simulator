@@ -10,7 +10,12 @@
 const double G = 6.6743e-11;
 const float c = 299792458.0f;
 const float M_SUN = 1.989e30f; 
-const float CHANDRASEKHAR_LIMIT = 3.5e25f; // combined limit within original coordinates scale
+const float CHANDRASEKHAR_LIMIT = 1.44f * M_SUN;
+const float METERS_PER_RENDER_UNIT = 1.0e6f;
+const float SIMULATION_TIME_SCALE = 250.0f;
+const float GRID_WARP_SCALE = 5.0e7f;
+const float WHITE_DWARF_DENSITY = 1.0e9f;
+const float STAR_RENDER_SCALE = 20.0f;
 
 enum ObjectType {
     OBJ_GENERIC,

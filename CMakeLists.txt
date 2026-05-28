@@ -24,6 +24,7 @@ add_executable(my_program
     main.cpp
     Object.cpp
     Simulation.cpp
+    RenderHelpers.cpp
 )
 
 # 5. Link raylib to your program (handles all the underlying graphics drivers)

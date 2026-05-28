@@ -1,14 +1,21 @@
+// Taken from kavan, translated from opengl to raylib, and heavily modified to be more physically accurate and visually appealing. 
 #include "Simulation.h"
 #include "raymath.h"
 #include <cmath>
 #include <cstdlib>
 
 extern bool pause;
-extern float separation;
-extern float phase;
-extern float eccentricity;
-extern float inclination;
-extern float longitude;
+extern float simulationSpeedFactor;
+
+float separation = 12000.0f;
+float phase = 0.0f;
+float eccentricity = 0.25f;
+float inclination = 0.0f;
+float longitude = 0.0f;
+
+Object CreateWhiteDwarf(Vector3 position, Vector3 velocity, float mass, Vector4 color, bool glow, float density) {
+    return Object(position, velocity, mass, density, color, glow, OBJ_WHITE_DWARF);
+}
 
 Vector3 CalculateBarycenter(const std::vector<Object>& bodies) {
     Vector3 com = { 0.0f, 0.0f, 0.0f };
@@ -28,46 +35,28 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     ejecta.clear();
     accretionFlow.clear();
 
-    // Start even further apart for a highly dramatic, sweeping orbital sequence
-    separation = 12000.0f; 
+    // Start from a physically plausible close white-dwarf binary in SI units.
+    separation = 1.4e9f;
     phase = 0.0f;
-    eccentricity = 0.25f;  // Elliptic Keplerian eccentricity
+    eccentricity = 0.0f;
     inclination = 0.0f;    // Flat orbit in X-Z plane
     longitude = 0.0f;
 
-    double m_WD1 = 2.8e25; // Massive Primary 
-    double m_WD2 = 1.0e25; // Lighter Secondary
+    double m_WD1 = 1.20f * M_SUN;
+    double m_WD2 = 1.05f * M_SUN;
 
-    Vector3 systemCenter = { 0.0f, 0.0f, -350.0f }; 
+    Vector3 systemCenter = { 0.0f, 0.0f, 0.0f };
 
-    // Pre-calculate initial positions at phase = 0.0f based on mass ratio and barycenter
+    // Place the stars on the x-axis and give them the Newtonian circular-orbit velocity.
     float r = separation * (1.0f - eccentricity);
     float r1 = r * (m_WD2 / (m_WD1 + m_WD2));
     float r2 = r * (m_WD1 / (m_WD1 + m_WD2));
+    float orbitalOmega = sqrtf((float)(G * (m_WD1 + m_WD2) / (r * r * r)));
 
-    float inc_rad = inclination * (PI / 180.0f);
-    float omega_rad = longitude * (PI / 180.0f);
-
-    float cosInc = cosf(inc_rad);
-    float sinInc = sinf(inc_rad);
-    float cosOmega = cosf(omega_rad);
-    float sinOmega = sinf(omega_rad);
-
-    float oX1 = -r1; // cos(0) = 1, sin(0) = 0
-    float oZ1 = 0.0f;
-    Vector3 pos1 = systemCenter + Vector3{
-        oX1 * cosOmega - oZ1 * sinOmega * cosInc,
-        oZ1 * sinInc,
-        oX1 * sinOmega + oZ1 * cosOmega * cosInc
-    };
-
-    float oX2 = r2;
-    float oZ2 = 0.0f;
-    Vector3 pos2 = systemCenter + Vector3{
-        oX2 * cosOmega - oZ2 * sinOmega * cosInc,
-        oZ2 * sinInc,
-        oX2 * sinOmega + oZ2 * cosOmega * cosInc
-    };
+    Vector3 pos1 = systemCenter + Vector3{ -r1, 0.0f, 0.0f };
+    Vector3 pos2 = systemCenter + Vector3{ r2, 0.0f, 0.0f };
+    Vector3 vel1 = Vector3{ 0.0f, 0.0f, -orbitalOmega * r1 };
+    Vector3 vel2 = Vector3{ 0.0f, 0.0f, orbitalOmega * r2 };
 
 // Convert custom macro color to normalized floats for shader rendering
     Vector4 normalizedColor = {
@@ -76,24 +65,23 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
         (float)babyboybuttermybunsblue.b / 255.0f,
         (float)babyboybuttermybunsblue.a / 255.0f
     };
-
-    // Changed 6th parameter (glow) from true to false to enable rich 3D shading
-    objs.push_back(Object(pos1, Vector3{ 0.0f, 0.0f, 0.0f }, m_WD1, 5515.0f, normalizedColor, false, OBJ_WHITE_DWARF));
-    objs.push_back(Object(pos2, Vector3{ 0.0f, 0.0f, 0.0f }, m_WD2, 5515.0f, normalizedColor, false, OBJ_WHITE_DWARF));
+// HANDLES WHITE STAR CREATION WITH HIGHER DENSITY TO PREVENT UNSTABLE INITIAL CONDITIONS
+    objs.push_back(CreateWhiteDwarf(pos1, vel1, m_WD1, normalizedColor, false, 5.0e8f));
+    objs.push_back(CreateWhiteDwarf(pos2, vel2, m_WD2, normalizedColor));
 }
 
 void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& accretionFlow, std::vector<DebrisParticle>& ejecta, float deltaTime, bool& triggerExplosion, Vector3& explosionPosition) {
+    float physicsDeltaTime = deltaTime * SIMULATION_TIME_SCALE * simulationSpeedFactor;
+
     // Process ejecta particle movement if stars have already detonated
     if (objs.empty()) {
         for (auto it = ejecta.begin(); it != ejecta.end();) {
-            it->position.x += it->velocity.x / 94.0f;
-            it->position.y += it->velocity.y / 94.0f;
-            it->position.z += it->velocity.z / 94.0f;
-            it->lifeTime -= deltaTime;
+            it->position += it->velocity * physicsDeltaTime;
+            it->lifeTime -= physicsDeltaTime;
             it->color.w = it->lifeTime / it->maxLifeTime;
             
             // Dynamic expansion: faster particles expand slightly quicker
-            it->radius += (280.0f + (fabsf(it->velocity.x) * 0.015f)) * deltaTime; 
+            it->radius += (280.0f + (fabsf(it->velocity.x) * 0.015f)) * physicsDeltaTime; 
             
             if (it->lifeTime <= 0.0f) {
                 it = ejecta.erase(it);
@@ -110,47 +98,23 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
     auto& wd2 = objs[1];
 
     if (!pause) {
-        // 1. Orbital decay (separation shrinks over time)
-        separation -= 150.0f * deltaTime;
-        if (separation < 100.0f) separation = 100.0f;
+        Vector3 separationVector = wd2.position - wd1.position;
+        float softening = 1.0e6f;
+        float distanceSquared = separationVector.x * separationVector.x + separationVector.y * separationVector.y + separationVector.z * separationVector.z + softening * softening;
+        float distance = sqrtf(distanceSquared);
+        float invDistanceCubed = 1.0f / (distanceSquared * distance);
 
-        // 2. Compute dynamic orbital period based on Kepler's 3rd Law
-        float period = 0.000004f * sqrtf(powf(separation, 3.0f));
-        if (period < 0.1f) period = 0.1f;
+        Vector3 accelOnWd1 = separationVector * ((float)(G * wd2.mass) * invDistanceCubed);
+        Vector3 accelOnWd2 = separationVector * (-(float)(G * wd1.mass) * invDistanceCubed);
 
-        // 3. Advance orbital phase progress
-        phase += deltaTime / period;
-        if (phase > 1.0f) phase -= 1.0f;
+        wd1.velocity += accelOnWd1 * physicsDeltaTime;
+        wd2.velocity += accelOnWd2 * physicsDeltaTime;
+        wd1.position += wd1.velocity * physicsDeltaTime;
+        wd2.position += wd2.velocity * physicsDeltaTime;
 
-        // 4. Kepler Solver for Eccentric Anomaly (ea)
-        float ma = phase * 2.0f * PI;
-        float ea = ma;
-        for (int i = 0; i < 15; ++i) {
-            ea = ma + eccentricity * sinf(ea);
-        }
-
-        // 5. True Anomaly (ta) and relative distance (r)
-        float cosE = cosf(ea);
-        float sinE = sinf(ea);
-        float cosTa = (cosE - eccentricity) / (1.0f - eccentricity * cosE);
-        float sinTa = (sqrtf(1.0f - eccentricity * eccentricity) * sinE) / (1.0f - eccentricity * cosE);
-
-        float r = separation * (1.0f - eccentricity * cosE);
-
-        // Orbital spacing balances strictly based on the mass ratio of the bodies
-        float r1 = r * (wd2.mass / (wd1.mass + wd2.mass));
-        float r2 = r * (wd1.mass / (wd1.mass + wd2.mass));
-
-        Vector3 systemCenter = { 0.0f, 0.0f, -350.0f };
-
-        // 6. Project flat orbit on horizontal X-Z plane (strictly constant Y value)
-        wd1.position = systemCenter + Vector3{ -r1 * cosTa, 0.0f, -r1 * sinTa };
-        wd2.position = systemCenter + Vector3{ r2 * cosTa, 0.0f, r2 * sinTa };
-
-        // Roche lobe mass siphoning
         float currentDist = Vector3Distance(wd1.position, wd2.position);
-        if (currentDist < wd2.radius * 3.5f) {
-            float massTransfer = 0.045e25f * deltaTime;
+        if (currentDist < (wd1.radius + wd2.radius) * 1.2f) {
+            float massTransfer = 1.0e18f * physicsDeltaTime;
             if (wd2.mass > massTransfer) {
                 wd2.mass -= massTransfer;
                 wd1.mass += massTransfer;

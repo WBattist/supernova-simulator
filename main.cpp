@@ -1,22 +1,13 @@
 #include "Simulation.h"
+#include "RenderHelpers.h"
 #include "rlgl.h"
-#include <cmath>
 #include <cstdio>
-
-
-#define babyboybuttermybunsblue CLITERAL(Color){ 107, 214, 250, 1 }
 
 std::vector<Object> objs;
 std::vector<DebrisParticle> ejecta;
 std::vector<AccretionParticle> accretionFlow;
 bool pause = true;
-
-// Shared orbital mechanics state values
-float separation = 12000.0f;
-float phase = 0.0f;
-float eccentricity = 0.25f;
-float inclination = 0.0f; // Flattens orbit on horizontal plane
-float longitude = 0.0f;   // Aligns orbit cleanly on X-axis
+float simulationSpeedFactor = 200.0f;
 
 const char* vertexShaderSource = R"glsl(
 #version 330
@@ -51,75 +42,10 @@ void main() {
     }
 })glsl";
 
-std::vector<Vector3> CreateGridVertices(float size, int divisions) {
-    std::vector<Vector3> vertices;
-    float step = size / divisions;
-    float halfSize = size / 2.0f;
-
-    for (int yStep = 3; yStep <= 3; ++yStep) {
-        float y = -halfSize * 0.3f + yStep * step;
-        for (int zStep = 0; zStep <= divisions; ++zStep) {
-            float z = -halfSize + zStep * step;
-            for (int xStep = 0; xStep < divisions; ++xStep) {
-                float xStart = -halfSize + xStep * step;
-                float xEnd = xStart + step;
-                vertices.push_back(Vector3{ xStart, y, z });
-                vertices.push_back(Vector3{ xEnd, y, z });
-            }
-        }
-    }
-    for (int xStep = 0; xStep <= divisions; ++xStep) {
-        float x = -halfSize + xStep * step;
-        for (int yStep = 3; yStep <= 3; ++yStep) {
-            float y = -halfSize * 0.3f + yStep * step;
-            for (int zStep = 0; zStep < divisions; ++zStep) {
-                float zStart = -halfSize + zStep * step;
-                float zEnd = zStart + step;
-                vertices.push_back(Vector3{ x, y, zStart });
-                vertices.push_back(Vector3{ x, y, zEnd });
-            }
-        }
-    }
-    return vertices;
-}
-
-// Inverted gravity funnel warped on top of base coordinate plane
-std::vector<Vector3> UpdateGridVertices(const std::vector<Vector3>& base, const std::vector<Object>& objs) {
-    std::vector<Vector3> deformed = base;
-
-    for (size_t i = 0; i < deformed.size(); ++i) {
-        float totalDisplacementY = 0.0f;
-        for (const auto& obj : objs) {
-            float dx = obj.position.x - deformed[i].x;
-            float dy = obj.position.y - deformed[i].y;
-            float dz = obj.position.z - deformed[i].z;
-            float distance = sqrtf(dx * dx + dy * dy + dz * dz);
-            
-            float distance_m = distance * 1000.0f; 
-            float rs = (2.0f * (float)G * obj.mass) / (c * c);
-
-            float displacementY = 0.0f;
-            float diff = distance_m - rs;
-            
-            if (diff > 0.0f) {
-                displacementY = 2.0f * sqrtf(rs * diff);
-            }
-            totalDisplacementY += displacementY * 2.5f; // Enhanced scale depth
-        }
-        
-        float maxDisplacement = 1800.0f;
-        if (totalDisplacementY > maxDisplacement) totalDisplacementY = maxDisplacement;
-
-        // Subtracting displacement bends the grid downwards under each star (gravity well funnel)
-        deformed[i].y = base[i].y - totalDisplacementY;
-    }
-    return deformed;
-}
-
 int main() {
     const int screenWidth = 800;
     const int screenHeight = 600;
-    InitWindow(screenWidth, screenHeight, "Type Ia Supernova Binary Merger");
+    InitWindow(screenWidth, screenHeight, "dr brown sim");
     SetTargetFPS(60);
     DisableCursor();
 
@@ -183,6 +109,8 @@ int main() {
         camera.up = cameraUp;
 
         if (IsKeyPressed(KEY_K)) pause = !pause;
+        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 64.0f);
+        if (IsKeyPressed(KEY_MINUS)) simulationSpeedFactor = fmaxf(simulationSpeedFactor / 1.25f, 0.01f);
         if (IsKeyPressed(KEY_R)) ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
         if (IsKeyPressed(KEY_Q)) break;
 
@@ -230,7 +158,7 @@ int main() {
         }
 
         gridVertices = UpdateGridVertices(baseGridVertices, objs);
-        Vector3 currentCOM = CalculateBarycenter(objs);
+        Vector3 currentCOM = ToRenderPosition(CalculateBarycenter(objs));
 
         // Render pass
         BeginDrawing();
@@ -268,7 +196,7 @@ int main() {
                 for (const auto& ap : accretionFlow) {
                     float gasColor[4] = { 1.0f, 0.7f, 0.3f, 0.9f };
                     SetShaderValue(shader, objectColorLoc, gasColor, SHADER_UNIFORM_VEC4);
-                    DrawModel(sphereModel, ap.position, 15.0f, babyboybuttermybunsblue);
+                    DrawModel(sphereModel, ToRenderPosition(ap.position), 0.05f, babyboybuttermybunsblue);
                 }
             }
 
@@ -281,7 +209,7 @@ int main() {
                 float colorArr[4] = { obj.color.x, obj.color.y, obj.color.z, obj.color.w };
                 SetShaderValue(shader, objectColorLoc, colorArr, SHADER_UNIFORM_VEC4);
 
-                DrawModel(sphereModel, obj.position, obj.radius, babyboybuttermybunsblue);
+                DrawModel(sphereModel, ToRenderPosition(obj.position), ToRenderLength(obj.radius), babyboybuttermybunsblue);
             }
 
             // E. Draw Supernova Gas Shell
@@ -294,12 +222,14 @@ int main() {
                 for (const auto& p : ejecta) {
                     float colorArr[4] = { p.color.x, p.color.y, p.color.z, p.color.w };
                     SetShaderValue(shader, objectColorLoc, colorArr, SHADER_UNIFORM_VEC4);
-                    DrawModel(sphereModel, p.position, p.radius, babyboybuttermybunsblue);
+                    DrawModel(sphereModel, ToRenderPosition(p.position), fmaxf(ToRenderLength(p.radius), 1.0f), babyboybuttermybunsblue);
                 }
             }
         EndMode3D();
 
         DrawFPS(10, 10);
+        DrawText(TextFormat("Sim speed x%.2f  [+/-]", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
+        DrawText("K pause | R reset | +/- sim speed", 10, 52, 18, RAYWHITE);
 
         EndDrawing();
     }
