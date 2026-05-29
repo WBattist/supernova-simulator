@@ -63,9 +63,9 @@ std::vector<Vector3> UpdateGridVertices(const std::vector<Vector3>& base, const 
             totalDisplacementY += displacementY;
         }
 
-        float maxDisplacement = 1800.0f;
+        float maxDisplacement = 9000.0f;
         if (totalDisplacementY > maxDisplacement) totalDisplacementY = maxDisplacement;
-
+ 
         deformed[i].y = base[i].y - totalDisplacementY;
     }
 
