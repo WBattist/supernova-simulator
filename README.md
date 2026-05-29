@@ -30,4 +30,8 @@ To run this simulation do the following steps:
 
 5. At this point a small arrow/run button should have appeared in the bottom left of your VS Code, click this button. It will run for the first time and install all the needed dependencies 
 
-6. Now click the same arrow/run button from step 5 and then a pop-up window should appear, encompasing the simulator 
+6. Now click the same arrow/run button from step 5 and then a pop-up window should appear, encompasing the simulator
+
+## Hackatime Stats
+
+![Hackatime Stats](https://github-readme-stats.hackclub.dev/api/wakatime?username=35079&api_domain=hackatime.hackclub.com&theme=darcula&custom_title=Hackatime+Stats&layout=compact&cache_seconds=0&langs_count=8)
