@@ -32,6 +32,9 @@ To run this simulation do the following steps:
 
 6. Now click the same arrow/run button from step 5 and then a pop-up window should appear, encompasing the simulator
 
+# To Do List:
+
+1. Undo the cap of 2d instead of 3d
 
 ## Hackatime Stats
 
