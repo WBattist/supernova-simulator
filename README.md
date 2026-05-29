@@ -34,7 +34,6 @@ To run this simulation do the following steps:
 
 # To Do List:
 
-1. Undo the cap of 2d instead of 3d
 
 ## Hackatime Stats
 
