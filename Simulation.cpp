@@ -198,7 +198,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
             double r = sqrt((double)(relPos.x * relPos.x + relPos.y * relPos.y + relPos.z * relPos.z));
 
             // base damping coefficient (tune this if it's too slow/fast)
-            const double baseK = 1e-3; // try 1e-4..1e-2
+            const double baseK = 5e-2f; // try 1e-4..1e-2
             double scale = 1.0;
             if (r > 1e-6) scale = (double)separation / r; // stronger damping as r shrinks
             if (scale < 1.0) scale = 1.0;
