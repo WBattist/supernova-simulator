@@ -34,13 +34,30 @@ void main() {
     if (isGrid != 0) {
         finalColor = objectColor;
     } else if (GLOW != 0) {
-        // Changed from 100000.0 to 1.5 to prevent washing out colors to pure white
         finalColor = vec4(objectColor.rgb * 1.5, objectColor.a);
     } else {
         float fade = smoothstep(0.0, 10.0, lightIntensity * 10.0);
         finalColor = vec4(objectColor.rgb * fade, objectColor.a);
     }
 })glsl";
+
+// Bridge declaration to helpers file transformation logic
+static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinationDegrees, float longitudeDegrees) {
+    float incRad = inclinationDegrees * (PI / 180.0f);
+    float lonRad = longitudeDegrees * (PI / 180.0f);
+
+    float cosInc = cosf(incRad);
+    float sinInc = sinf(incRad);
+    float cosLon = cosf(lonRad);
+    float sinLon = sinf(lonRad);
+
+    Vector3 point = { local.x, 0.0f, local.y };
+    return center + Vector3{
+        point.x * cosLon - point.z * sinLon * cosInc,
+        point.z * sinInc,
+        point.x * sinLon + point.z * cosLon * cosInc
+    };
+}
 
 int main() {
     const int screenWidth = 800;
@@ -59,7 +76,6 @@ int main() {
     camera.projection = CAMERA_PERSPECTIVE;
     camera.up = Vector3{ 0.0f, 1.0f, 0.0f };
 
-    // Restore exact original camera view
     Vector3 cameraPos = { 0.0f, 1000.0f, 5000.0f };
     float yaw = -90.0f;
     float pitch = 0.0;
@@ -78,7 +94,6 @@ int main() {
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
 
-        // Mouse look
         Vector2 mouseDelta = GetMouseDelta();
         yaw += mouseDelta.x * 0.1f;
         pitch -= mouseDelta.y * 0.1f;
@@ -108,48 +123,43 @@ int main() {
         camera.target = cameraPos + cameraFront;
         camera.up = cameraUp;
         if (IsKeyPressed(KEY_K)) pause = !pause;
-        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 200.0f);
+        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 500.0f);
         if (IsKeyPressed(KEY_MINUS)) simulationSpeedFactor = fmaxf(simulationSpeedFactor / 1.25f, 0.01f);
         if (IsKeyPressed(KEY_R)) ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
         if (IsKeyPressed(KEY_Q)) break;
 
-        // Physics update
+        // Physics engine tracks purely flat coordinates internally
         bool triggerExplosion = false;
         Vector3 explosionPosition = { 0.0f, 0.0f, 0.0f };
         UpdatePhysics(objs, accretionFlow, ejecta, deltaTime, triggerExplosion, explosionPosition);
 
-        // Process Super-Chandrasekhar Merger Detonation [2.3, 3.1]
         if (triggerExplosion) {
             objs.clear();
             accretionFlow.clear();
 
-            // Spawn massive, cinematic multi-spectrum shell of ejecta (1200 particles) [3.1]
+            // Project flat explosion vector into its tilted visual world orientation
+            Vector2 flatExplosion = Vector2{ explosionPosition.x, explosionPosition.y };
+            Vector3 tiltedExplosion = OrbitLocalToWorld(flatExplosion, Vector3{0,0,0}, inclination, longitude);
+
             int ejectaShellCount = 1200;
             for (int k = 0; k < ejectaShellCount; k++) {
                 float theta = ((float)rand() / RAND_MAX) * PI;
                 float phi = ((float)rand() / RAND_MAX) * 2.0f * PI;
                 Vector3 direction = { sinf(theta) * cosf(phi), sinf(theta) * sinf(phi), cosf(theta) };
 
-                // Highly energetic velocity dispersion shell [3.1]
                 float blastSpeed = 500.0f + ((float)rand() / RAND_MAX) * 6000.0f;
                 DebrisParticle p;
-                p.position = explosionPosition;
+                p.position = tiltedExplosion; // Spawns directly on tilted coordinates
                 p.velocity = direction * blastSpeed;
 
-                // Color mapping: hotter blue cores transitioning to yellow, orange, and cooling red [3.1]
                 float rngColor = (float)rand() / RAND_MAX;
-                if (rngColor < 0.15f) {
-                    p.color = Vector4{ 0.45f, 0.70f, 1.00f, 1.0f }; // Ultra-hot ionized core (Ice Blue)
-                } else if (rngColor < 0.50f) {
-                    p.color = Vector4{ 1.00f, 0.50f, 0.05f, 1.0f }; // Thermal shockwave (Bright Orange)
-                } else if (rngColor < 0.80f) {
-                    p.color = Vector4{ 1.00f, 0.85f, 0.15f, 1.0f }; // Hot plasma (Solar Yellow)
-                } else {
-                    p.color = Vector4{ 0.85f, 0.10f, 0.10f, 1.0f }; // Cooling expanding shells (Deep Red)
-                }
+                if (rngColor < 0.15f) p.color = Vector4{ 0.45f, 0.70f, 1.00f, 1.0f };
+                else if (rngColor < 0.50f) p.color = Vector4{ 1.00f, 0.50f, 0.05f, 1.0f };
+                else if (rngColor < 0.80f) p.color = Vector4{ 1.00f, 0.85f, 0.15f, 1.0f };
+                else p.color = Vector4{ 0.85f, 0.10f, 0.10f, 1.0f };
 
                 p.radius = 35.0f + ((float)rand() / RAND_MAX) * 90.0f; 
-                p.maxLifeTime = 2.5f + ((float)rand() / RAND_MAX) * 4.0f; // Varied fading lifespans
+                p.maxLifeTime = 2.5f + ((float)rand() / RAND_MAX) * 4.0f;
                 p.lifeTime = p.maxLifeTime;
 
                 ejecta.push_back(p);
@@ -157,16 +167,19 @@ int main() {
         }
 
         gridVertices = UpdateGridVertices(baseGridVertices, objs);
-        Vector3 currentCOM = ToRenderPosition(CalculateBarycenter(objs));
+        
+        // Tilt the calculated center of mass point for correct rendering position
+        Vector3 flatCOM = CalculateBarycenter(objs);
+        Vector3 tiltedCOM = OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.y}, Vector3{0,0,0}, inclination, longitude);
+        Vector3 currentCOM = ToRenderPosition(tiltedCOM);
 
-        // Render pass
         BeginDrawing();
         ClearBackground(BLACK);
 
         BeginMode3D(camera);
             rlSetClipPlanes(0.1, 750000.0);
 
-            // A. Draw Grid 
+            // A. Draw Deformed Grid 
             for (size_t i = 0; i < gridVertices.size(); i += 2) {
                 DrawLine3D(gridVertices[i], gridVertices[i+1], ColorAlpha(WHITE, 0.25f));
             }
@@ -184,9 +197,24 @@ int main() {
                 rlVertex3f(currentCOM.x, currentCOM.y, currentCOM.z + markerSize);
                 rlEnd();
             }
-            
 
-            // D. Draw Progenitors (Ice Blue and Soft Blue hot White Dwarfs)
+            // C. Draw Accretion Streams (Tilted projection map)
+            if (!accretionFlow.empty()) {
+                int isGridValObj = 0;
+                SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);
+                int glowValObj = 1;
+                SetShaderValue(shader, glowLoc, &glowValObj, SHADER_UNIFORM_INT);
+
+                for (const auto& ap : accretionFlow) {
+                    float gasColor[4] = { 1.0f, 0.7f, 0.3f, 0.9f };
+                    SetShaderValue(shader, objectColorLoc, gasColor, SHADER_UNIFORM_VEC4);
+                    
+                    Vector3 visualPos = OrbitLocalToWorld(Vector2{ap.position.x, ap.position.y}, Vector3{0,0,0}, inclination, longitude);
+                    DrawModel(sphereModel, ToRenderPosition(visualPos), 0.05f, babyboybuttermybunsblue);
+                }
+            }
+
+            // D. Draw Progenitors (Projected dynamically into 3D)
             for (const auto& obj : objs) {
                 int isGridValObj = 0;
                 SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);
@@ -195,7 +223,8 @@ int main() {
                 float colorArr[4] = { obj.color.x, obj.color.y, obj.color.z, obj.color.w };
                 SetShaderValue(shader, objectColorLoc, colorArr, SHADER_UNIFORM_VEC4);
 
-                DrawModel(sphereModel, ToRenderPosition(obj.position), ToRenderLength(obj.radius), babyboybuttermybunsblue);
+                Vector3 visualPos = OrbitLocalToWorld(Vector2{obj.position.x, obj.position.y}, Vector3{0,0,0}, inclination, longitude);
+                DrawModel(sphereModel, ToRenderPosition(visualPos), ToRenderLength(obj.radius), babyboybuttermybunsblue);
             }
 
             // E. Draw Supernova Gas Shell
@@ -220,7 +249,7 @@ int main() {
         EndMode3D();
 
         DrawFPS(10, 10);
-        DrawText(TextFormat("Sim speed x%.2f", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
+        DrawText(TextFormat("Sim speed x%.2f  [+/-]", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
         DrawText("K pause | R reset | +/- sim speed", 10, 52, 18, RAYWHITE);
 
         EndDrawing();
