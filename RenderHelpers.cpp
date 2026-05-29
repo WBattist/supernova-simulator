@@ -93,7 +93,7 @@ static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinatio
 static void DrawQuadraticOrbitSegment(Vector2 start, Vector2 control, Vector2 end, Vector3 center, float inclinationDegrees, float longitudeDegrees, Color color) {
     const int subdivisions = 24;
     Vector2 previous = start;
-    const float pathRadius = 0.0f;
+    const float pathRadius = 15.0f;
 
     for (int i = 1; i <= subdivisions; ++i) {
         float t = (float)i / (float)subdivisions;
