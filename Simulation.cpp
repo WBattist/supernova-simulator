@@ -9,10 +9,10 @@ extern float simulationSpeedFactor;
 
 float separation = 12000.0f;
 float phase = 0.0f;
-float eccentricity = 0.25f;
+float eccentricity = 0.0f; // Defaulting to 0.0f for stable initialization
 float inclination = 0.0f;
 float longitude = 0.0f;
-// straight from web sim ...
+
 static Vector3 RotateOrbitPoint(Vector3 point, float inclinationDegrees, float longitudeDegrees) {
     float incRad = inclinationDegrees * (PI / 180.0f);
     float lonRad = longitudeDegrees * (PI / 180.0f);
@@ -63,25 +63,25 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
 
     Vector3 systemCenter = { 0.0f, 0.0f, 0.0f };
 
-    // Place the stars on the x-axis and give them the Newtonian circular-orbit velocity.
+    // Set up on flat plane (Z is handled through rendering transformations)
     float r = separation * (1.0f - eccentricity);
     float r1 = r * (m_WD2 / (m_WD1 + m_WD2));
     float r2 = r * (m_WD1 / (m_WD1 + m_WD2));
     float orbitalOmega = sqrtf((float)(G * (m_WD1 + m_WD2) / (r * r * r)));
 
-    Vector3 pos1 = systemCenter + RotateOrbitPoint(Vector3{ -r1, 0.0f, 0.0f }, inclination, longitude);
-    Vector3 pos2 = systemCenter + RotateOrbitPoint(Vector3{ r2, 0.0f, 0.0f }, inclination, longitude);
-    Vector3 vel1 = RotateOrbitPoint(Vector3{ 0.0f, 0.0f, -orbitalOmega * r1 }, inclination, longitude);
-    Vector3 vel2 = RotateOrbitPoint(Vector3{ 0.0f, 0.0f, orbitalOmega * r2 }, inclination, longitude);
+    // Physics coordinates initialized on a pure flat flat plane (X, Y)
+    Vector3 pos1 = Vector3{ -r1, 0.0f, 0.0f };
+    Vector3 pos2 = Vector3{ r2, 0.0f, 0.0f };
+    Vector3 vel1 = Vector3{ 0.0f, -orbitalOmega * r1, 0.0f };
+    Vector3 vel2 = Vector3{ 0.0f, orbitalOmega * r2, 0.0f };
 
-// Convert custom macro color to normalized floats for shader rendering
     Vector4 normalizedColor = {
         (float)babyboybuttermybunsblue.r / 255.0f,
         (float)babyboybuttermybunsblue.g / 255.0f,
         (float)babyboybuttermybunsblue.b / 255.0f,
         (float)babyboybuttermybunsblue.a / 255.0f
     };
-// HANDLES WHITE STAR CREATION WITH HIGHER DENSITY TO PREVENT UNSTABLE INITIAL CONDITIONS
+
     objs.push_back(CreateWhiteDwarf(pos1, vel1, m_WD1, normalizedColor, false, 5.0e8f));
     objs.push_back(CreateWhiteDwarf(pos2, vel2, m_WD2, normalizedColor));
 }
@@ -89,14 +89,11 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
 void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& accretionFlow, std::vector<DebrisParticle>& ejecta, float deltaTime, bool& triggerExplosion, Vector3& explosionPosition) {
     float physicsDeltaTime = deltaTime * SIMULATION_TIME_SCALE * simulationSpeedFactor;
 
-    // Process ejecta particle movement if stars have already detonated
     if (objs.empty()) {
         for (auto it = ejecta.begin(); it != ejecta.end();) {
             it->position += it->velocity * physicsDeltaTime;
             it->lifeTime -= physicsDeltaTime;
             it->color.w = it->lifeTime / it->maxLifeTime;
-            
-            // Dynamic expansion: faster particles expand slightly quicker
             it->radius += (280.0f + (fabsf(it->velocity.x) * 0.015f)) * physicsDeltaTime; 
             
             if (it->lifeTime <= 0.0f) {
@@ -115,7 +112,9 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
 
     if (!pause) {
         Vector3 separationVector = wd2.position - wd1.position;
-        float softening = 1.0e6f;
+        
+        // Softening reduced to allow complete inner merger contact without gravity clamping
+        float softening = 10.0f; 
         float distanceSquared = separationVector.x * separationVector.x + separationVector.y * separationVector.y + separationVector.z * separationVector.z + softening * softening;
         float distance = sqrtf(distanceSquared);
         float invDistanceCubed = 1.0f / (distanceSquared * distance);
@@ -126,11 +125,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
         wd1.velocity += accelOnWd1 * physicsDeltaTime;
         wd2.velocity += accelOnWd2 * physicsDeltaTime;
 
-        // --- Gravitational-wave driven inspiral (energy loss) ---
-        // Approximate orbital energy loss for near-circular binaries using Peters (1964) formula
-        // Power radiated (circular orbit): P = (32/5) * G^4/(c^5) * (m1^2 * m2^2 * (m1 + m2)) / r^5
-        // We convert the loss in orbital energy to a reduction in the relative velocity that
-        // preserves the center-of-mass motion but decreases the orbital separation.
+        // --- Gravitational-wave driven energy loss (Peters, 1964) ---
         {
             double m1 = wd1.mass;
             double m2 = wd2.mass;
@@ -141,99 +136,98 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
             double r = sqrt((double)(relPos.x * relPos.x + relPos.y * relPos.y + relPos.z * relPos.z));
 
             if (r > 1e-3) {
-                // circular-orbit power (SI units)
-                double P = (32.0 / 5.0) * (G * G * G * G) / ( (double)c * (double)c * (double)c * (double)c * (double)c )
-                           * (m1 * m1 * m2 * m2 * M) / (r * r * r * r * r);
-
+                double P = (32.0 / 5.0) * (G * G * G * G) / (pow((double)c, 5.0)) * (m1 * m1 * m2 * m2 * M) / pow(r, 5.0);
                 double dE = P * (double)physicsDeltaTime;
 
-                // current orbital energy (negative for bound orbit): E = - G m1 m2 / (2 a) ; for circular a ~= r
                 double Eold = -G * m1 * m2 / (2.0 * r);
-                double Enew = Eold - dE; // energy becomes more negative
+                double Enew = Eold - dE;
 
-                // protect against non-physical values
                 if (Enew < -1e-200) {
                     double anew = -G * m1 * m2 / (2.0 * Enew);
                     if (anew < r) {
-                        // desired new relative circular speed
                         double vrel_new_mag = sqrt(G * M / anew);
 
-                        // compute tangent direction (component of relVel perpendicular to relPos)
                         Vector3 rhat = relPos / (float)r;
                         double vdotr = relVel.x * rhat.x + relVel.y * rhat.y + relVel.z * rhat.z;
                         Vector3 vt = relVel - rhat * (float)vdotr;
                         double vtmag = sqrt((double)(vt.x * vt.x + vt.y * vt.y + vt.z * vt.z));
 
-                        Vector3 tangent;
-                        if (vtmag > 1e-9) {
-                            tangent = vt / (float)vtmag;
-                        } else {
-                            // fallback: pick an arbitrary perpendicular vector
-                            tangent = Vector3{ -rhat.z, 0.0f, rhat.x };
-                            double tam = sqrt((double)(tangent.x * tangent.x + tangent.y * tangent.y + tangent.z * tangent.z));
-                            if (tam > 0.0) tangent = tangent / (float)tam;
-                        }
-
-                        Vector3 vrel_new = tangent * (float)vrel_new_mag;
-
-                        // preserve center of mass velocity
+                        Vector3 tangent = (vtmag > 1e-9) ? (vt / (float)vtmag) : Vector3Normalize(Vector3{ -rhat.y, rhat.x, 0.0f });
                         Vector3 vcm = (wd1.velocity * (m1 / (float)M)) + (wd2.velocity * (m2 / (float)M));
 
-                        // set new velocities such that v2 - v1 = vrel_new and m1*v1 + m2*v2 = M*vcm
-                        wd1.velocity = vcm - vrel_new * (float)(m2 / M);
-                        wd2.velocity = vcm + vrel_new * (float)(m1 / M);
+                        // Retain the actual radial velocity component so they can plunge inward!
+                        Vector3 v_radial = rhat * (float)vdotr;
+                        Vector3 v_tangent_corrected = tangent * (float)vrel_new_mag;
+                        Vector3 vrel_combined = v_radial + v_tangent_corrected;
+
+                        wd1.velocity = vcm - vrel_combined * (float)(m2 / M);
+                        wd2.velocity = vcm + vrel_combined * (float)(m1 / M);
                     }
                 }
             }
         }
 
-        // Adaptive relative-velocity damping to drive inspiral while preserving COM motion.
-        // This simple approach increases damping as the separation decreases.
+        // --- Core-Isolating Tangential Velocity Damping Loop ---
         {
             double m1 = wd1.mass;
             double m2 = wd2.mass;
             double M = m1 + m2;
 
-            Vector3 relPos = wd2.position - wd1.position;
-            double r = sqrt((double)(relPos.x * relPos.x + relPos.y * relPos.y + relPos.z * relPos.z));
+            Vector3 relPosDamp = wd2.position - wd1.position;
+            double rDamp = sqrt((double)(relPosDamp.x * relPosDamp.x + relPosDamp.y * relPosDamp.y + relPosDamp.z * relPosDamp.z));
 
-            // base damping coefficient (tune this if it's too slow/fast)
-            const double baseK = 5e-2f; // try 1e-4..1e-2
-            double scale = 1.0;
-            if (r > 1e-6) scale = (double)separation / r; // stronger damping as r shrinks
+            const double baseK = 3e-3; 
+            double scale = (rDamp > 1e-6) ? ((double)separation / rDamp) : 1.0;
             if (scale < 1.0) scale = 1.0;
             double dampingK = baseK * scale * scale;
 
             Vector3 vcm = (wd1.velocity * (m1 / (float)M)) + (wd2.velocity * (m2 / (float)M));
-            Vector3 vrel = wd2.velocity - wd1.velocity;
+            Vector3 relVelDamp = wd2.velocity - wd1.velocity;
 
+            Vector3 rhat = relPosDamp / (float)rDamp;
+            float v_radial_mag = relVelDamp.x * rhat.x + relVelDamp.y * rhat.y + relVelDamp.z * rhat.z;
+            
+            // Separate components cleanly
+            Vector3 v_radial = rhat * v_radial_mag;
+            Vector3 v_tangent = relVelDamp - v_radial;
+
+            // DAMP ONLY THE TANGENT PLANE FORCE (Drops orbital angular momentum, frees gravity to pull them inward)
             float dampFactor = 1.0f - (float)(dampingK * physicsDeltaTime);
             if (dampFactor < 0.0f) dampFactor = 0.0f;
-            vrel *= dampFactor;
+            v_tangent *= dampFactor;
 
-            wd1.velocity = vcm - vrel * (float)(m2 / M);
-            wd2.velocity = vcm + vrel * (float)(m1 / M);
+            Vector3 vrel_decayed = v_radial + v_tangent;
+
+            wd1.velocity = vcm - vrel_decayed * (float)(m2 / M);
+            wd2.velocity = vcm + vrel_decayed * (float)(m1 / M);
         }
 
         wd1.position += wd1.velocity * physicsDeltaTime;
         wd2.position += wd2.velocity * physicsDeltaTime;
 
+        // Hard Lock to 2D Physics Plane
+        wd1.position.z = 0.0f;
+        wd2.position.z = 0.0f;
+        wd1.velocity.z = 0.0f;
+        wd2.velocity.z = 0.0f;
+
+        // Mass Transfer evaluation
         float currentDist = Vector3Distance(wd1.position, wd2.position);
-        if (currentDist < (wd1.radius + wd2.radius) * 1.2f) {
-            float massTransfer = 1.0e18f * physicsDeltaTime;
+        if (currentDist < (wd1.radius + wd2.radius) * 1.3f) {
+            float massTransfer = 3.0e19f * physicsDeltaTime;
             if (wd2.mass > massTransfer) {
                 wd2.mass -= massTransfer;
                 wd1.mass += massTransfer;
             }
-            if (GetRandomValue(0, 100) < 30) {
+            if (GetRandomValue(0, 100) < 40) {
                 accretionFlow.push_back({ wd2.position, 0.0f });
             }
         }
     }
 
-    // Accretion Flow visual siphoning along flat horizontal plane
+    // Process gas particles
     for (auto it = accretionFlow.begin(); it != accretionFlow.end();) {
-        it->progress += 3.0f * deltaTime;
+        it->progress += 4.0f * deltaTime;
         if (it->progress >= 1.0f || objs.size() < 2) {
             it = accretionFlow.erase(it);
         } else {
@@ -242,9 +236,9 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
         }
     }
 
-    // Merger contact detection (only evaluated while the simulation is unpaused)
+    // Merger evaluation
     if (!pause) {
-        float collisionDist = (wd1.radius + wd2.radius) * 1.05f;
+        float collisionDist = (wd1.radius + wd2.radius) * 1.02f;
         float currentDist = Vector3Distance(wd1.position, wd2.position);
         if (currentDist <= collisionDist) {
             float combinedMass = wd1.mass + wd2.mass;
