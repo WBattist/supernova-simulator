@@ -1,5 +1,4 @@
 #include "RenderHelpers.h"
-
 #include <cmath>
 
 Vector3 ToRenderPosition(Vector3 meters) {
@@ -71,7 +70,6 @@ std::vector<Vector3> UpdateGridVertices(const std::vector<Vector3>& base, const 
 
     return deformed;
 }
-// straight from web sim ...
 
 static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinationDegrees, float longitudeDegrees) {
     float incRad = inclinationDegrees * (PI / 180.0f);
@@ -89,11 +87,13 @@ static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinatio
         point.x * sinLon + point.z * cosLon * cosInc
     };
 }
-// from web sim
+
 static void DrawQuadraticOrbitSegment(Vector2 start, Vector2 control, Vector2 end, Vector3 center, float inclinationDegrees, float longitudeDegrees, Color color) {
     const int subdivisions = 24;
     Vector2 previous = start;
-    const float pathRadius = 15.0f;
+    
+    // Fixed: Set radius path to 8.5 to ensure paths are visually discernible
+    const float pathRadius = 8.5f; 
 
     for (int i = 1; i <= subdivisions; ++i) {
         float t = (float)i / (float)subdivisions;
@@ -118,16 +118,15 @@ static void DrawQuadraticOrbitSegment(Vector2 start, Vector2 control, Vector2 en
 }
 
 void DrawOrbitalPaths(const std::vector<Object>& objs, float eccentricity, float inclination, float longitude) {
-    if (objs.size() < 2) {
-        return;
-    }
+    if (objs.size() < 2) return;
 
     float totalMass = objs[0].mass + objs[1].mass;
-    if (totalMass <= 0.0f) {
-        return;
-    }
+    if (totalMass <= 0.0f) return;
 
-    Vector3 center = ToRenderPosition(CalculateBarycenter(objs));
+    // Use pure flat center tracking before transforming orientation outputs
+    Vector3 flatCOM = CalculateBarycenter(objs);
+    Vector3 center = ToRenderPosition(OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.y}, Vector3{0,0,0}, inclination, longitude));
+    
     float separationMeters = Vector3Distance(objs[0].position, objs[1].position);
 
     float a1 = separationMeters * (objs[1].mass / totalMass);
@@ -166,7 +165,7 @@ void DrawOrbitalPaths(const std::vector<Object>& objs, float eccentricity, float
     Vector2 previous1 = path1Start;
     Vector2 previous2 = path2Start;
 
-    Color pathColor = ColorAlpha(SKYBLUE, 0.95f);
+    Color pathColor = ColorAlpha(SKYBLUE, 0.75f);
 
     for (int i = 0; i < n; ++i) {
         aAngle += step;
