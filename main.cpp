@@ -108,7 +108,7 @@ int main() {
         camera.target = cameraPos + cameraFront;
         camera.up = cameraUp;
         if (IsKeyPressed(KEY_K)) pause = !pause;
-        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 200.0f);
+        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 64.0f);
         if (IsKeyPressed(KEY_MINUS)) simulationSpeedFactor = fmaxf(simulationSpeedFactor / 1.25f, 0.01f);
         if (IsKeyPressed(KEY_R)) ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
         if (IsKeyPressed(KEY_Q)) break;
