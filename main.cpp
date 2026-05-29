@@ -184,20 +184,7 @@ int main() {
                 rlVertex3f(currentCOM.x, currentCOM.y, currentCOM.z + markerSize);
                 rlEnd();
             }
-
-            // C. Draw Accretion Streams
-            if (!accretionFlow.empty()) {
-                int isGridValObj = 0;
-                SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);
-                int glowValObj = 1;
-                SetShaderValue(shader, glowLoc, &glowValObj, SHADER_UNIFORM_INT);
-
-                for (const auto& ap : accretionFlow) {
-                    float gasColor[4] = { 1.0f, 0.7f, 0.3f, 0.9f };
-                    SetShaderValue(shader, objectColorLoc, gasColor, SHADER_UNIFORM_VEC4);
-                    DrawModel(sphereModel, ToRenderPosition(ap.position), 0.05f, babyboybuttermybunsblue);
-                }
-            }
+            
 
             // D. Draw Progenitors (Ice Blue and Soft Blue hot White Dwarfs)
             for (const auto& obj : objs) {
@@ -233,7 +220,7 @@ int main() {
         EndMode3D();
 
         DrawFPS(10, 10);
-        DrawText(TextFormat("Sim speed x%.2f  [+/-]", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
+        DrawText(TextFormat("Sim speed x%.2f", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
         DrawText("K pause | R reset | +/- sim speed", 10, 52, 18, RAYWHITE);
 
         EndDrawing();
