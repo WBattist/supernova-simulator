@@ -53,9 +53,9 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     accretionFlow.clear();
 
     // Bound initial separation in meters (~60,000 km) for strong gravity and rapid GW decay
-    separation = 6.0e8f; 
+    separation = 14.0e9f; 
     phase = 0.0f;
-    eccentricity = 0.0f;
+    eccentricity = 0.15f; // Injecting slight starting eccentricity for clear elliptical path profiles!
     inclination = 0.0f;
     longitude = 0.0f;
 
@@ -68,9 +68,9 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     float r1 = separation * (float)(m_WD2 / totalMass);
     float r2 = separation * (float)(m_WD1 / totalMass);
 
-    // Exact Keplerian orbital velocities required for circular stability
-    float v1 = sqrtf((float)(G * m_WD2 * m_WD2 / (totalMass * separation)));
-    float v2 = sqrtf((float)(G * m_WD1 * m_WD1 / (totalMass * separation)));
+    // Exact Keplerian orbital velocities required for stability (Accounting for starting eccentricity)
+    float v1 = sqrtf((float)(G * m_WD2 * m_WD2 / (totalMass * separation))) * (1.0f + eccentricity);
+    float v2 = sqrtf((float)(G * m_WD1 * m_WD1 / (totalMass * separation))) * (1.0f + eccentricity);
 
     // Pure flat 2D physics coordinates
     Vector3 pos1 = Vector3{ -r1, 0.0f, 0.0f };
@@ -85,8 +85,14 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
         (float)babyboybuttermybunsblue.a / 255.0f
     };
 
-    objs.push_back(CreateWhiteDwarf(pos1, vel1, m_WD1, normalizedColor, false, 1.0e9f));
-    objs.push_back(CreateWhiteDwarf(pos2, vel2, m_WD2, normalizedColor, false, 2.0e9f));
+    Object wd1 = CreateWhiteDwarf(pos1, vel1, m_WD1, normalizedColor, true, 1.0e9f);
+    wd1.radius = 8.29e6f; // Metric meters allocation guard (~8,290 km)
+    
+    Object wd2 = CreateWhiteDwarf(pos2, vel2, m_WD2, normalizedColor, true, 2.0e9f);
+    wd2.radius = 5.86e6f; // (~5,860 km)
+
+    objs.push_back(wd1);
+    objs.push_back(wd2);
 }
 
 void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& accretionFlow, std::vector<DebrisParticle>& ejecta, float deltaTime, bool& triggerExplosion, Vector3& explosionPosition) {
@@ -94,7 +100,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
     float totalTimeBill = deltaTime * SIMULATION_TIME_SCALE * simulationSpeedFactor;
 
     // Strict sub-step ceiling (in seconds) to prevent numerical overshooting/teleportation
-    const float maxSubStep = 5.0f; 
+    const float maxSubStep = 1.0f; 
     float timeAccumulator = 0.0f;
 
     if (objs.empty()) {
@@ -126,7 +132,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
         if (!pause) {
             Vector3 separationVector = wd2.position - wd1.position;
             
-            float softening = 10.0f; 
+            float softening = 1000.0f; // Scaled up to cleanly match raw meter dimensions
             float distanceSquared = separationVector.x * separationVector.x + separationVector.y * separationVector.y + separationVector.z * separationVector.z + softening * softening;
             float distance = sqrtf(distanceSquared);
             float invDistanceCubed = 1.0f / (distanceSquared * distance);
@@ -137,8 +143,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
             wd1.velocity += accelOnWd1 * physicsDeltaTime;
             wd2.velocity += accelOnWd2 * physicsDeltaTime;
 
-            // --- Gravitational-wave driven energy loss (Peters, 1964) ---
-            // --- Core-Isolating Tangential Velocity Damping Loop (FIXED) ---
+            // --- Consolidated Smooth Inspiral Tangential Velocity Damping ---
             {
                 double m1 = wd1.mass;
                 double m2 = wd2.mass;
@@ -147,12 +152,11 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
                 Vector3 relPosDamp = wd2.position - wd1.position;
                 double rDamp = sqrt((double)(relPosDamp.x * relPosDamp.x + relPosDamp.y * relPosDamp.y + relPosDamp.z * relPosDamp.z));
 
-                // FIXED: Drastically increase the base friction coefficient
-                const double baseK = 1.5e-1; 
+                // TUNED FLUID SCALE: Reduced factor smoothly drains velocity over orbits 
+                // without collapsing the centrifugal loop into a straight drop line instantly.
+                const double baseK = 1.2e-6; 
                 
-                // FIXED: Use an inverse cubic relationship so drag violently explodes 
-                // as the stars get closer, preventing them from catching a stable orbit.
-                double scale = (rDamp > 1e-6) ? (double)separation / rDamp : 1.0;
+                double scale = (rDamp > 1e-6) ? (6.0e7 / rDamp) : 1.0;
                 double dampingK = baseK * (scale * scale * scale); 
 
                 Vector3 vcm = (wd1.velocity * (m1 / (float)M)) + (wd2.velocity * (m2 / (float)M));
@@ -164,43 +168,9 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
                 Vector3 v_radial = rhat * v_radial_mag;
                 Vector3 v_tangent = relVelDamp - v_radial;
 
-                // Bleed off tangential velocity to drop orbital angular momentum
+                // Bleed off tangential velocity smoothly to display orbital tightening
                 float dampFactor = 1.0f - (float)(dampingK * physicsDeltaTime);
-                if (dampFactor < 0.0f) dampFactor = 0.0f;
-                v_tangent *= dampFactor;
-
-                Vector3 vrel_decayed = v_radial + v_tangent;
-
-                wd1.velocity = vcm - vrel_decayed * (float)(m2 / M);
-                wd2.velocity = vcm + vrel_decayed * (float)(m1 / M);
-            }
-
-            // --- Core-Isolating Tangential Velocity Damping Loop ---
-            {
-                double m1 = wd1.mass;
-                double m2 = wd2.mass;
-                double M = m1 + m2;
-
-                Vector3 relPosDamp = wd2.position - wd1.position;
-                double rDamp = sqrt((double)(relPosDamp.x * relPosDamp.x + relPosDamp.y * relPosDamp.y + relPosDamp.z * relPosDamp.z));
-
-                const double baseK = 3e-3; 
-                double scale = (rDamp > 1e-6) ? ((double)separation / rDamp) : 1.0;
-                if (scale < 1.0) scale = 1.0;
-                double dampingK = baseK * scale * scale;
-
-                Vector3 vcm = (wd1.velocity * (m1 / (float)M)) + (wd2.velocity * (m2 / (float)M));
-                Vector3 relVelDamp = wd2.velocity - wd1.velocity;
-
-                Vector3 rhat = relPosDamp / (float)rDamp;
-                float v_radial_mag = relVelDamp.x * rhat.x + relVelDamp.y * rhat.y + relVelDamp.z * rhat.z;
-                
-                Vector3 v_radial = rhat * v_radial_mag;
-                Vector3 v_tangent = relVelDamp - v_radial;
-
-                // Damp only tangential forces to smoothly drop angular momentum
-                float dampFactor = 1.0f - (float)(dampingK * physicsDeltaTime);
-                if (dampFactor < 0.0f) dampFactor = 0.0f;
+                if (dampFactor < 0.1f) dampFactor = 0.1f; // Prevent full sideways velocity zeroing
                 v_tangent *= dampFactor;
 
                 Vector3 vrel_decayed = v_radial + v_tangent;
@@ -220,8 +190,8 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
 
             // Roche-Lobe Overlap Mass Transfer evaluation
             float currentDist = Vector3Distance(wd1.position, wd2.position);
-            if (currentDist < (wd1.radius + wd2.radius) * 1.3f) {
-                float massTransfer = 3.0e19f * physicsDeltaTime;
+            if (currentDist < (wd1.radius + wd2.radius) * 1.5f) {
+                float massTransfer = 8.0e19f * physicsDeltaTime;
                 if (wd2.mass > massTransfer) {
                     wd2.mass -= massTransfer;
                     wd1.mass += massTransfer;

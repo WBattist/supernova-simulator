@@ -7,7 +7,7 @@
 // TOGGLE SWITCH: Set to true for absolute headless console logs.
 //                Set to false to use normal 3D visual windows on desktop monitors.
 // =========================================================================
-const bool ENABLE_LOGGING = true; 
+const bool ENABLE_LOGGING = false; 
 
 const float DebugLogger::LOG_INTERVAL = 0.5f; 
 float DebugLogger::logTimer = 0.0f;

@@ -3,14 +3,12 @@
 #include "DebugLogger.h" // Needed to check ENABLE_LOGGING
 #include "rlgl.h"
 #include <cstdio>
-#include <chrono>
-#include <thread>
 
 std::vector<Object> objs;
 std::vector<DebrisParticle> ejecta;
 std::vector<AccretionParticle> accretionFlow;
-bool pause = false; // Default to false for terminal mode so it starts immediately
-float simulationSpeedFactor = 1500.0f;
+bool pause = true;
+float simulationSpeedFactor = 150.0f;
 
 const char* vertexShaderSource = R"glsl(
 #version 330
@@ -62,31 +60,6 @@ static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinatio
 }
 
 int main() {
-    // --- HEADLESS TERMINAL MODE LOOP ---
-    if (ENABLE_LOGGING) {
-        printf("[HEADLESS MODE] Starting simulation in terminal-only mode...\n");
-        ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
-
-        // Fixed timestep simulation clock for terminal testing (equivalent to ~60 FPS update rate)
-        const float fixedDt = 0.01667f; 
-        bool triggerExplosion = false;
-        Vector3 explosionPosition = { 0.0f, 0.0f, 0.0f };
-
-        while (!objs.empty()) {
-            UpdatePhysics(objs, accretionFlow, ejecta, fixedDt, triggerExplosion, explosionPosition);
-            
-            if (triggerExplosion) {
-                printf("\n💥 SUPERNOVA CHANDRASEKHAR DETONATION TRIGGERED! 💥\n\n");
-                break;
-            }
-
-            // Sleep to mimic real-time tracking so your console screen remains readable
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
-        }
-        return 0;
-    }
-
-    // --- STANDARD GRAPHICS 3D MODE (Skips if ENABLE_LOGGING is true) ---
     const int screenWidth = 800;
     const int screenHeight = 600;
     InitWindow(screenWidth, screenHeight, "dr brown sim");
@@ -150,7 +123,7 @@ int main() {
         camera.target = cameraPos + cameraFront;
         camera.up = cameraUp;
         if (IsKeyPressed(KEY_K)) pause = !pause;
-        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 500.0f);
+        if (IsKeyPressed(KEY_EQUAL)) simulationSpeedFactor = fminf(simulationSpeedFactor * 1.25f, 200.0f);
         if (IsKeyPressed(KEY_MINUS)) simulationSpeedFactor = fmaxf(simulationSpeedFactor / 1.25f, 0.01f);
         if (IsKeyPressed(KEY_R)) ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
         if (IsKeyPressed(KEY_Q)) break;
@@ -192,10 +165,7 @@ int main() {
         }
 
         gridVertices = UpdateGridVertices(baseGridVertices, objs);
-        
-        Vector3 flatCOM = CalculateBarycenter(objs);
-        Vector3 tiltedCOM = OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.y}, Vector3{0,0,0}, inclination, longitude);
-        Vector3 currentCOM = ToRenderPosition(tiltedCOM);
+        Vector3 currentCOM = ToRenderPosition(CalculateBarycenter(objs));
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -229,9 +199,8 @@ int main() {
                 for (const auto& ap : accretionFlow) {
                     float gasColor[4] = { 1.0f, 0.7f, 0.3f, 0.9f };
                     SetShaderValue(shader, objectColorLoc, gasColor, SHADER_UNIFORM_VEC4);
-                    
-                    Vector3 visualPos = OrbitLocalToWorld(Vector2{ap.position.x, ap.position.y}, Vector3{0,0,0}, inclination, longitude);
-                    DrawModel(sphereModel, ToRenderPosition(visualPos), 0.05f, babyboybuttermybunsblue);
+
+                    DrawModel(sphereModel, ToRenderPosition(ap.position), 0.05f, babyboybuttermybunsblue);
                 }
             }
 
@@ -243,8 +212,7 @@ int main() {
                 float colorArr[4] = { obj.color.x, obj.color.y, obj.color.z, obj.color.w };
                 SetShaderValue(shader, objectColorLoc, colorArr, SHADER_UNIFORM_VEC4);
 
-                Vector3 visualPos = OrbitLocalToWorld(Vector2{obj.position.x, obj.position.y}, Vector3{0,0,0}, inclination, longitude);
-                DrawModel(sphereModel, ToRenderPosition(visualPos), ToRenderLength(obj.radius), babyboybuttermybunsblue);
+                DrawModel(sphereModel, ToRenderPosition(obj.position), ToRenderLength(obj.radius), babyboybuttermybunsblue);
             }
 
             if (!ejecta.empty()) {
@@ -268,7 +236,7 @@ int main() {
         EndMode3D();
 
         DrawFPS(10, 10);
-        DrawText(TextFormat("Sim speed x%.2f  [+/-]", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
+        DrawText(TextFormat("Sim speed x%.2f", simulationSpeedFactor), 10, 30, 20, RAYWHITE);
         DrawText("K pause | R reset | +/- sim speed", 10, 52, 18, RAYWHITE);
 
         EndDrawing();
