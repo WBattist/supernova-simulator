@@ -1,13 +1,16 @@
 #include "Simulation.h"
 #include "RenderHelpers.h"
+#include "DebugLogger.h" // Needed to check ENABLE_LOGGING
 #include "rlgl.h"
 #include <cstdio>
+#include <chrono>
+#include <thread>
 
 std::vector<Object> objs;
 std::vector<DebrisParticle> ejecta;
 std::vector<AccretionParticle> accretionFlow;
-bool pause = true;
-float simulationSpeedFactor = 200.0f;
+bool pause = false; // Default to false for terminal mode so it starts immediately
+float simulationSpeedFactor = 1500.0f;
 
 const char* vertexShaderSource = R"glsl(
 #version 330
@@ -41,7 +44,6 @@ void main() {
     }
 })glsl";
 
-// Bridge declaration to helpers file transformation logic
 static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinationDegrees, float longitudeDegrees) {
     float incRad = inclinationDegrees * (PI / 180.0f);
     float lonRad = longitudeDegrees * (PI / 180.0f);
@@ -60,6 +62,31 @@ static Vector3 OrbitLocalToWorld(Vector2 local, Vector3 center, float inclinatio
 }
 
 int main() {
+    // --- HEADLESS TERMINAL MODE LOOP ---
+    if (ENABLE_LOGGING) {
+        printf("[HEADLESS MODE] Starting simulation in terminal-only mode...\n");
+        ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
+
+        // Fixed timestep simulation clock for terminal testing (equivalent to ~60 FPS update rate)
+        const float fixedDt = 0.01667f; 
+        bool triggerExplosion = false;
+        Vector3 explosionPosition = { 0.0f, 0.0f, 0.0f };
+
+        while (!objs.empty()) {
+            UpdatePhysics(objs, accretionFlow, ejecta, fixedDt, triggerExplosion, explosionPosition);
+            
+            if (triggerExplosion) {
+                printf("\n💥 SUPERNOVA CHANDRASEKHAR DETONATION TRIGGERED! 💥\n\n");
+                break;
+            }
+
+            // Sleep to mimic real-time tracking so your console screen remains readable
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        }
+        return 0;
+    }
+
+    // --- STANDARD GRAPHICS 3D MODE (Skips if ENABLE_LOGGING is true) ---
     const int screenWidth = 800;
     const int screenHeight = 600;
     InitWindow(screenWidth, screenHeight, "dr brown sim");
@@ -128,7 +155,6 @@ int main() {
         if (IsKeyPressed(KEY_R)) ResetToStableDoubleDegenerate(objs, ejecta, accretionFlow);
         if (IsKeyPressed(KEY_Q)) break;
 
-        // Physics engine tracks purely flat coordinates internally
         bool triggerExplosion = false;
         Vector3 explosionPosition = { 0.0f, 0.0f, 0.0f };
         UpdatePhysics(objs, accretionFlow, ejecta, deltaTime, triggerExplosion, explosionPosition);
@@ -137,7 +163,6 @@ int main() {
             objs.clear();
             accretionFlow.clear();
 
-            // Project flat explosion vector into its tilted visual world orientation
             Vector2 flatExplosion = Vector2{ explosionPosition.x, explosionPosition.y };
             Vector3 tiltedExplosion = OrbitLocalToWorld(flatExplosion, Vector3{0,0,0}, inclination, longitude);
 
@@ -149,7 +174,7 @@ int main() {
 
                 float blastSpeed = 500.0f + ((float)rand() / RAND_MAX) * 6000.0f;
                 DebrisParticle p;
-                p.position = tiltedExplosion; // Spawns directly on tilted coordinates
+                p.position = tiltedExplosion;
                 p.velocity = direction * blastSpeed;
 
                 float rngColor = (float)rand() / RAND_MAX;
@@ -168,7 +193,6 @@ int main() {
 
         gridVertices = UpdateGridVertices(baseGridVertices, objs);
         
-        // Tilt the calculated center of mass point for correct rendering position
         Vector3 flatCOM = CalculateBarycenter(objs);
         Vector3 tiltedCOM = OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.y}, Vector3{0,0,0}, inclination, longitude);
         Vector3 currentCOM = ToRenderPosition(tiltedCOM);
@@ -179,12 +203,10 @@ int main() {
         BeginMode3D(camera);
             rlSetClipPlanes(0.1, 750000.0);
 
-            // A. Draw Deformed Grid 
             for (size_t i = 0; i < gridVertices.size(); i += 2) {
                 DrawLine3D(gridVertices[i], gridVertices[i+1], ColorAlpha(WHITE, 0.25f));
             }
 
-            // B. Draw Center of Mass Marker
             if (!objs.empty()) {
                 rlBegin(RL_LINES);
                 float markerSize = 250.0f;
@@ -198,7 +220,6 @@ int main() {
                 rlEnd();
             }
 
-            // C. Draw Accretion Streams (Tilted projection map)
             if (!accretionFlow.empty()) {
                 int isGridValObj = 0;
                 SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);
@@ -214,7 +235,6 @@ int main() {
                 }
             }
 
-            // D. Draw Progenitors (Projected dynamically into 3D)
             for (const auto& obj : objs) {
                 int isGridValObj = 0;
                 SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);
@@ -227,7 +247,6 @@ int main() {
                 DrawModel(sphereModel, ToRenderPosition(visualPos), ToRenderLength(obj.radius), babyboybuttermybunsblue);
             }
 
-            // E. Draw Supernova Gas Shell
             if (!ejecta.empty()) {
                 int isGridValObj = 0;
                 SetShaderValue(shader, isGridLoc, &isGridValObj, SHADER_UNIFORM_INT);

@@ -13,7 +13,7 @@ void Object::UpdatePos(float deltaTime) {
 
 // Added missing accelerate implementation
 void Object::accelerate(float x, float y, float z) {
-    velocity.x += (x / 96.0f) * dt;
-    velocity.y += (y / 96.0f) * dt;
-    velocity.z += (z / 96.0f) * dt;
+    velocity.x += x / 96.0f;
+    velocity.y += y / 96.0f;
+    velocity.z += z / 96.0f;
 }

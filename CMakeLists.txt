@@ -25,6 +25,7 @@ add_executable(my_program
     Object.cpp
     Simulation.cpp
     RenderHelpers.cpp
+    DebugLogger.cpp # <-- Fixed: Tells the linker to compile your diagnostic logger
 )
 
 # 5. Link raylib to your program (handles all the underlying graphics drivers)
