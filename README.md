@@ -32,9 +32,6 @@ To run this simulation do the following steps:
 
 6. Now click the same arrow/run button from step 5 and then a pop-up window should appear, encompasing the simulator
 
-# To Do List:
-
-
 ## Hackatime Stats
 
 ![Hackatime Stats](https://github-readme-stats.hackclub.dev/api/wakatime?username=35079&api_domain=hackatime.hackclub.com&theme=darcula&custom_title=Hackatime+Stats&layout=compact&cache_seconds=0&langs_count=8)
