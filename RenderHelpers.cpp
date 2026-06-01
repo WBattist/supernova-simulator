@@ -125,7 +125,7 @@ void DrawOrbitalPaths(const std::vector<Object>& objs, float eccentricity, float
 
     // Use pure flat center tracking before transforming orientation outputs
     Vector3 flatCOM = CalculateBarycenter(objs);
-    Vector3 center = ToRenderPosition(OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.y}, Vector3{0,0,0}, inclination, longitude));
+    Vector3 center = ToRenderPosition(OrbitLocalToWorld(Vector2{flatCOM.x, flatCOM.z}, Vector3{0,0,0}, inclination, longitude));
     
     float separationMeters = Vector3Distance(objs[0].position, objs[1].position);
 

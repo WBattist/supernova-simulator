@@ -53,9 +53,9 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     accretionFlow.clear();
 
     // Bound initial separation in meters (~60,000 km) for strong gravity and rapid GW decay
-    separation = 14.0e9f; 
+    separation = 45.0e8f; 
     phase = 0.0f;
-    eccentricity = 0.15f; // Injecting slight starting eccentricity for clear elliptical path profiles!
+    eccentricity = 0.0f; // Injecting slight starting eccentricity for clear elliptical path profiles!
     inclination = 0.0f;
     longitude = 0.0f;
 
@@ -72,11 +72,11 @@ void ResetToStableDoubleDegenerate(std::vector<Object>& objs, std::vector<Debris
     float v1 = sqrtf((float)(G * m_WD2 * m_WD2 / (totalMass * separation))) * (1.0f + eccentricity);
     float v2 = sqrtf((float)(G * m_WD1 * m_WD1 / (totalMass * separation))) * (1.0f + eccentricity);
 
-    // Pure flat 2D physics coordinates
+    // Pure flat 2D physics coordinates on the X/Z plane
     Vector3 pos1 = Vector3{ -r1, 0.0f, 0.0f };
     Vector3 pos2 = Vector3{  r2, 0.0f, 0.0f };
-    Vector3 vel1 = Vector3{ 0.0f, -v1, 0.0f };
-    Vector3 vel2 = Vector3{ 0.0f,  v2, 0.0f };
+    Vector3 vel1 = Vector3{ 0.0f, 0.0f, -v1 };
+    Vector3 vel2 = Vector3{ 0.0f, 0.0f,  v2 };
 
     Vector4 normalizedColor = {
         (float)babyboybuttermybunsblue.r / 255.0f,
@@ -154,7 +154,7 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
 
                 // TUNED FLUID SCALE: Reduced factor smoothly drains velocity over orbits 
                 // without collapsing the centrifugal loop into a straight drop line instantly.
-                const double baseK = 1.2e-6; 
+                const double baseK = 5.5e-2;
                 
                 double scale = (rDamp > 1e-6) ? (6.0e7 / rDamp) : 1.0;
                 double dampingK = baseK * (scale * scale * scale); 
@@ -183,10 +183,10 @@ void UpdatePhysics(std::vector<Object>& objs, std::vector<AccretionParticle>& ac
             wd2.position += wd2.velocity * physicsDeltaTime;
 
             // Strict 2D Local Planar Lock
-            wd1.position.z = 0.0f;
-            wd2.position.z = 0.0f;
-            wd1.velocity.z = 0.0f;
-            wd2.velocity.z = 0.0f;
+            wd1.position.y = 0.0f;
+            wd2.position.y = 0.0f;
+            wd1.velocity.y = 0.0f;
+            wd2.velocity.y = 0.0f;
 
             // Roche-Lobe Overlap Mass Transfer evaluation
             float currentDist = Vector3Distance(wd1.position, wd2.position);

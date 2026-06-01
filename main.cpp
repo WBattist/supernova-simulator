@@ -136,7 +136,7 @@ int main() {
             objs.clear();
             accretionFlow.clear();
 
-            Vector2 flatExplosion = Vector2{ explosionPosition.x, explosionPosition.y };
+            Vector2 flatExplosion = Vector2{ explosionPosition.x, explosionPosition.z };
             Vector3 tiltedExplosion = OrbitLocalToWorld(flatExplosion, Vector3{0,0,0}, inclination, longitude);
 
             int ejectaShellCount = 1200;

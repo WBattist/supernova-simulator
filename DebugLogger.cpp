@@ -30,12 +30,12 @@ void DebugLogger::LogSystemState(const std::vector<Object>& objs, float deltaTim
     const auto& wd2 = objs[1];
 
     float dx = wd2.position.x - wd1.position.x;
-    float dy = wd2.position.y - wd1.position.y;
-    float distance = std::sqrt(dx*dx + dy*dy);
+    float dz = wd2.position.z - wd1.position.z;
+    float distance = std::sqrt(dx*dx + dz*dz);
 
     float rvx = wd2.velocity.x - wd1.velocity.x;
-    float rvy = wd2.velocity.y - wd1.velocity.y;
-    float relSpeed = std::sqrt(rvx*rvx + rvy*rvy);
+    float rvz = wd2.velocity.z - wd1.velocity.z;
+    float relSpeed = std::sqrt(rvx*rvx + rvz*rvz);
 
     std::cout << "\n================= DIAGNOSTIC DASHBOARD =================" << std::endl;
     std::cout << std::fixed << std::setprecision(3);
