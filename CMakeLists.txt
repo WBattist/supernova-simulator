@@ -30,3 +30,6 @@ add_executable(my_program
 
 # 5. Link raylib to your program (handles all the underlying graphics drivers)
 target_link_libraries(my_program PRIVATE raylib)
+
+# Automatically copy eric.png to the build directory during compilation
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/eric.png" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
