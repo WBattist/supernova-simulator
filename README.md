@@ -3,7 +3,10 @@
 
 [Final Simulation Video](https://drive.google.com/file/d/11lxWM96lmU4DiSiQs-xdw52DQXL_4B0v/view?usp=sharing)
 
+This project is a custom made physics engine that is meant to simulate the orbit and the detonation of a Type 1a Supernovae. It can simplify be played by clicking the 'K' button while in the simulation and can be reset by clicking the 'R'.
 </div>
+
+
 
 ## Credits
 
